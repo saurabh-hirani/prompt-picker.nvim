@@ -40,12 +40,13 @@ Configuration file format:
 ```jsonc
 {
   "config": {
-    "send_to_tmux": false,      // true - send to tmux pane instead of clipboard
-    "tmux_target": [            // List of target panes in format: session:window.pane
-      "+",                      // send to next panel
+    "send_to_tmux": false,         // true - send to tmux pane instead of clipboard
+    "tmux_panes": [                // List of target panes shown in selector
+      "+",                         // next pane
       "mysession:window1.1"
     ],
-    "tmux_send_enter": false    // true - send Enter key after prompt
+    "tmux_send_enter": false,      // true - send Enter key after prompt
+    "tmux_auto_select_panes": []   // If set, use these panes directly without prompting (e.g. ["+", "+2"])
   },
   "prompts": {
     "explain": "Explain {range}",
