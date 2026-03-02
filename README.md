@@ -19,6 +19,37 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
   "saurabh-hirani/nvim-prompt-picker",
   dependencies = { "ibhagwan/fzf-lua" },
+  opts = {
+    config_file = "/path/to/prompt_config.jsonc",  -- Optional: path to config file
+  },
+}
+```
+
+## Configuration
+
+Create `prompt_config.jsonc` and reference it in your plugin setup. See `prompt_config.jsonc.example` for reference.
+
+```lua
+opts = {
+  config_file = "/path/to/prompt_config.jsonc",
+}
+```
+
+Configuration file format:
+
+```jsonc
+{
+  "config": {
+    "send_to_tmux": false,      // true - send to tmux pane instead of clipboard
+    "tmux_target": [            // List of target panes in format: session:window.pane
+      "mysession:window1.1"
+    ],
+    "tmux_send_enter": false    // true - send Enter key after prompt
+  },
+  "prompts": {
+    "explain": "Explain {range}",
+    "fix": "Fix {range}"
+  }
 }
 ```
 
