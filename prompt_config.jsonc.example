@@ -6,7 +6,8 @@
       "+",                      // send to next pane
       "mysession:window1.1"
     ],
-    "tmux_send_enter": false    // true - send Enter key after prompt
+    "tmux_send_enter": false,   // true - send Enter key after prompt
+    "tmux_send_pane_plus": false // true - always send to '+' (next pane) without prompting
   },
 
   // Prompt templates

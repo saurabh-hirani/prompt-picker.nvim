@@ -10,7 +10,7 @@ local function load_config()
   if file then
     local content = file:read('*a')
     file:close()
-    content = content:gsub('//[^\n]*', '')  -- Remove comments
+    content = content:gsub('//[^\n]*', '')
     local ok, data = pcall(vim.json.decode, content)
     if ok then
       return data
@@ -23,6 +23,7 @@ local default_config = {
   send_to_tmux = false,
   tmux_target = {"+"},
   tmux_send_enter = false,
+  tmux_send_pane_plus = false,  -- If true, always send to '+' without prompting
 }
 
 local default_prompts = {
@@ -91,6 +92,17 @@ end
 
 local function send_prompt(text)
   if M.config.send_to_tmux then
+    -- If tmux_send_pane_plus is enabled, send directly to '+' without prompting
+    if M.config.tmux_send_pane_plus then
+      local escaped = text:gsub("'", "'\\''")
+      local cmd = string.format("tmux send-keys -t '+' '%s'", escaped)
+      vim.fn.system(cmd)
+      if M.config.tmux_send_enter then
+        vim.fn.system("tmux send-keys -t '+' Enter")
+      end
+      return
+    end
+    
     -- Get list of panes in current session
     local handle = io.popen('tmux list-panes -s -F "#{window_index}.#{pane_index}: #{pane_current_command} [#{window_name}]"')
     local panes = handle:read("*a")
@@ -197,6 +209,15 @@ function M.select()
   end
   table.insert(items, "adhoc")
   table.sort(items)
+  
+  -- Move "explain" to the front if it exists
+  for i, item in ipairs(items) do
+    if item == "explain" then
+      table.remove(items, i)
+      table.insert(items, 1, "explain")
+      break
+    end
+  end
 
   vim.ui.select(items, {
     prompt = "Select a prompt: ",
@@ -227,6 +248,24 @@ function M.adhoc()
   local ctx = get_context()
   show_adhoc_prompt(ctx)
 end
+
+function M.send_prompt_by_name(prompt_name)
+  local ctx = get_context()
+  local template = M.prompts[prompt_name]
+  if not template then
+    print("Prompt '" .. prompt_name .. "' not found")
+    return
+  end
+  local rendered = (template:gsub("{(%w+)}", function(key)
+    return ctx[key] or "{" .. key .. "}"
+  end))
+  send_prompt(rendered)
+end
+
+-- Convenience functions
+function M.explain() M.send_prompt_by_name("explain") end
+function M.document() M.send_prompt_by_name("document") end
+function M.implement() M.send_prompt_by_name("implement") end
 
 function M.setup(opts)
   opts = opts or {}
