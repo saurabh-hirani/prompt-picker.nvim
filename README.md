@@ -62,10 +62,18 @@ Configuration file format:
 ```lua
 -- Select from predefined prompts
 vim.keymap.set("n", "<leader>pp", function() require("prompt-picker").select() end)
+vim.keymap.set("v", "<leader>pp", ":<C-u>lua require('prompt-picker').select()<CR>")
 
 -- Adhoc custom prompt
-vim.keymap.set({"n", "v"}, "<leader>pa", function() require("prompt-picker").adhoc() end)
+vim.keymap.set("n", "<leader>pa", function() require("prompt-picker").adhoc() end)
+vim.keymap.set("v", "<leader>pa", ":<C-u>lua require('prompt-picker').adhoc()<CR>")
+
+-- Direct shortcuts
+vim.keymap.set("n", "<leader>px", function() require("prompt-picker").explain() end)
+vim.keymap.set("v", "<leader>px", ":<C-u>lua require('prompt-picker').explain()<CR>")
 ```
+
+**Note:** Visual mode mappings use `:<C-u>lua ...` to preserve visual selection marks.
 
 ### Predefined Prompts
 
