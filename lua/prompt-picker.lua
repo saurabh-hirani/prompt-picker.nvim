@@ -1,6 +1,31 @@
 local M = {}
 
-M.prompts = {
+local config_file_path = nil
+
+local function load_config()
+  if not config_file_path then
+    return nil
+  end
+  local file = io.open(vim.fn.expand(config_file_path), 'r')
+  if file then
+    local content = file:read('*a')
+    file:close()
+    content = content:gsub('//[^\n]*', '')  -- Remove comments
+    local ok, data = pcall(vim.json.decode, content)
+    if ok then
+      return data
+    end
+  end
+  return nil
+end
+
+local default_config = {
+  send_to_tmux = false,
+  tmux_target = {"+"},
+  tmux_send_enter = false,
+}
+
+local default_prompts = {
   changes = "Review my changes in file: {file}",
   diagnostics = "Help me fix the diagnostics in {file}\n{diagnostics}",
   diagnostics_all = "Help me fix these diagnostics\n{diagnostics_all}",
@@ -12,6 +37,9 @@ M.prompts = {
   review = "Review {file} for any issues or improvements",
   tests = "Write tests for {range}",
 }
+
+M.config = vim.deepcopy(default_config)
+M.prompts = vim.deepcopy(default_prompts)
 
 local function get_context()
   local buf = vim.api.nvim_get_current_buf()
@@ -37,7 +65,7 @@ local function get_context()
     selection = vim.fn.getline(row)
   end
 
-  local range = string.format("@%s :L%d-L%d", file, start_line, end_line)
+  local range = string.format("%s:L%d-L%d", file, start_line, end_line)
 
   local diagnostics = {}
   for _, d in ipairs(vim.diagnostic.get(buf)) do
@@ -59,6 +87,69 @@ local function render_prompt(template)
   return (template:gsub("{(%w+)}", function(key)
     return ctx[key] or "{" .. key .. "}"
   end))
+end
+
+local function send_prompt(text)
+  if M.config.send_to_tmux then
+    -- Get list of panes in current session
+    local handle = io.popen('tmux list-panes -s -F "#{window_index}.#{pane_index}: #{pane_current_command} [#{window_name}]"')
+    local panes = handle:read("*a")
+    handle:close()
+    
+    -- Build items list
+    local items = {"[use config targets]", "+ (next pane)"}
+    
+    for line in panes:gmatch("[^\r\n]+") do
+      table.insert(items, line)
+    end
+    
+    -- Use fzf-lua for multi-select
+    require('fzf-lua').fzf_exec(items, {
+      prompt = "Send to tmux pane(s) (Tab for multi-select): ",
+      actions = {
+        ['default'] = function(selected)
+          if not selected or #selected == 0 then
+            return
+          end
+          
+          local targets = {}
+          for _, choice in ipairs(selected) do
+            if choice == "[use config targets]" then
+              local config_targets = type(M.config.tmux_target) == "table" and M.config.tmux_target or {M.config.tmux_target}
+              for _, target in ipairs(config_targets) do
+                table.insert(targets, target)
+              end
+            else
+              table.insert(targets, choice)
+            end
+          end
+          
+          for _, choice in ipairs(targets) do
+            local target
+            if choice == "+ (next pane)" or choice == "+" then
+              target = "+"
+            elseif choice:match("^%d+%.%d+:") then
+              -- From tmux list-panes: "1.2: command [window]"
+              target = choice:match("^(%d+%.%d+):")
+            else
+              -- From config: "one2n:nvim.1" or similar
+              target = choice
+            end
+            
+            -- Escape single quotes for shell
+            local escaped = text:gsub("'", "'\\''")
+            vim.fn.system(string.format("tmux send-keys -t '%s' '%s'", target, escaped))
+            if M.config.tmux_send_enter then
+              vim.fn.system(string.format("tmux send-keys -t '%s' Enter", target))
+            end
+          end
+        end
+      }
+    })
+  else
+    vim.fn.setreg('+', text)
+    print("Prompt copied to clipboard")
+  end
 end
 
 local function show_adhoc_prompt(ctx)
@@ -84,8 +175,7 @@ local function show_adhoc_prompt(ctx)
     vim.schedule(function()
       if input and input ~= "" then
         local rendered = string.format("%s %s", input, ctx.range)
-        vim.fn.setreg('+', rendered)
-        print("Prompt copied to clipboard")
+        send_prompt(rendered)
       end
     end)
   end, { buffer = buf })
@@ -128,8 +218,7 @@ function M.select()
       local rendered = (template:gsub("{(%w+)}", function(key)
         return ctx[key] or "{" .. key .. "}"
       end))
-      vim.fn.setreg('+', rendered)
-      print("Prompt copied to clipboard")
+      send_prompt(rendered)
     end
   end)
 end
@@ -137,6 +226,40 @@ end
 function M.adhoc()
   local ctx = get_context()
   show_adhoc_prompt(ctx)
+end
+
+function M.setup(opts)
+  opts = opts or {}
+  if opts.config_file then
+    config_file_path = opts.config_file
+    local loaded = load_config()
+    if loaded then
+      M.config = vim.tbl_deep_extend("force", default_config, loaded.config or {})
+      M.prompts = vim.tbl_deep_extend("force", default_prompts, loaded.prompts or {})
+    end
+  end
+  if opts.config then
+    M.config = vim.tbl_deep_extend("force", M.config, opts.config)
+  end
+  if opts.prompts then
+    M.prompts = vim.tbl_deep_extend("force", M.prompts, opts.prompts)
+  end
+end
+
+function M.reload_config()
+  if config_file_path then
+    local loaded = load_config()
+    if loaded then
+      M.config = vim.tbl_deep_extend("force", default_config, loaded.config or {})
+      M.prompts = vim.tbl_deep_extend("force", default_prompts, loaded.prompts or {})
+      print("Config reloaded from " .. config_file_path)
+      print("tmux_target: " .. vim.inspect(M.config.tmux_target))
+    else
+      print("Failed to reload config from " .. config_file_path)
+    end
+  else
+    print("No config file path set")
+  end
 end
 
 return M
