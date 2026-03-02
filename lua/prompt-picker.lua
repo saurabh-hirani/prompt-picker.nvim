@@ -21,9 +21,9 @@ end
 
 local default_config = {
   send_to_tmux = false,
-  tmux_target = {"+"},
+  tmux_panes = {"+"},
   tmux_send_enter = false,
-  tmux_send_pane_plus = false,  -- If true, always send to '+' without prompting
+  tmux_auto_select_panes = {},  -- If set, use these panes directly without prompting
 }
 
 local default_prompts = {
@@ -92,13 +92,14 @@ end
 
 local function send_prompt(text)
   if M.config.send_to_tmux then
-    -- If tmux_send_pane_plus is enabled, send directly to '+' without prompting
-    if M.config.tmux_send_pane_plus then
-      local escaped = text:gsub("'", "'\\''")
-      local cmd = string.format("tmux send-keys -t '+' '%s'", escaped)
-      vim.fn.system(cmd)
-      if M.config.tmux_send_enter then
-        vim.fn.system("tmux send-keys -t '+' Enter")
+    -- If tmux_auto_select_panes is set, use those panes directly without prompting
+    if M.config.tmux_auto_select_panes and #M.config.tmux_auto_select_panes > 0 then
+      for _, target in ipairs(M.config.tmux_auto_select_panes) do
+        local escaped = text:gsub("'", "'\\''")
+        vim.fn.system(string.format("tmux send-keys -t '%s' '%s'", target, escaped))
+        if M.config.tmux_send_enter then
+          vim.fn.system(string.format("tmux send-keys -t '%s' Enter", target))
+        end
       end
       return
     end
@@ -108,8 +109,14 @@ local function send_prompt(text)
     local panes = handle:read("*a")
     handle:close()
     
-    -- Build items list
-    local items = {"[use config targets]", "+ (next pane)"}
+    -- Build items list from tmux_panes config
+    local items = {"+ (next pane)"}
+    local config_panes = type(M.config.tmux_panes) == "table" and M.config.tmux_panes or {M.config.tmux_panes}
+    for _, pane in ipairs(config_panes) do
+      if pane ~= "+" then
+        table.insert(items, pane)
+      end
+    end
     
     for line in panes:gmatch("[^\r\n]+") do
       table.insert(items, line)
@@ -124,31 +131,16 @@ local function send_prompt(text)
             return
           end
           
-          local targets = {}
           for _, choice in ipairs(selected) do
-            if choice == "[use config targets]" then
-              local config_targets = type(M.config.tmux_target) == "table" and M.config.tmux_target or {M.config.tmux_target}
-              for _, target in ipairs(config_targets) do
-                table.insert(targets, target)
-              end
-            else
-              table.insert(targets, choice)
-            end
-          end
-          
-          for _, choice in ipairs(targets) do
             local target
             if choice == "+ (next pane)" or choice == "+" then
               target = "+"
             elseif choice:match("^%d+%.%d+:") then
-              -- From tmux list-panes: "1.2: command [window]"
               target = choice:match("^(%d+%.%d+):")
             else
-              -- From config: "one2n:nvim.1" or similar
               target = choice
             end
             
-            -- Escape single quotes for shell
             local escaped = text:gsub("'", "'\\''")
             vim.fn.system(string.format("tmux send-keys -t '%s' '%s'", target, escaped))
             if M.config.tmux_send_enter then
@@ -292,7 +284,7 @@ function M.reload_config()
       M.config = vim.tbl_deep_extend("force", default_config, loaded.config or {})
       M.prompts = vim.tbl_deep_extend("force", default_prompts, loaded.prompts or {})
       print("Config reloaded from " .. config_file_path)
-      print("tmux_target: " .. vim.inspect(M.config.tmux_target))
+      print("tmux_panes: " .. vim.inspect(M.config.tmux_panes))
     else
       print("Failed to reload config from " .. config_file_path)
     end
