@@ -9,6 +9,8 @@ A Neovim plugin for quickly generating AI prompts with file context.
 - Automatically includes file path and line ranges
 - Works with visual selections
 - Integrates with LSP diagnostics
+- Send prompts to clipboard or tmux panes
+- Multi-pane tmux support with auto-selection
 - Uses fzf-lua for selection UI
 
 ## Installation
