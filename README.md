@@ -42,6 +42,7 @@ Configuration file format:
   "config": {
     "send_to_tmux": false,      // true - send to tmux pane instead of clipboard
     "tmux_target": [            // List of target panes in format: session:window.pane
+      "+",                      // send to next panel
       "mysession:window1.1"
     ],
     "tmux_send_enter": false    // true - send Enter key after prompt
