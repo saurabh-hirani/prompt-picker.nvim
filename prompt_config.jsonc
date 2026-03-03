@@ -1,0 +1,30 @@
+{
+  // Configuration options
+  "config": {
+    "send_to_tmux": true,      // true - send to tmux pane instead of clipboard
+    "tmux_panes": [             // List of target panes shown in selector
+      "+",
+      "+2",
+      "+3"
+    ],
+    "tmux_send_enter": true,    // true - send Enter key after prompt
+    "tmux_auto_select_panes": [  // If set, use these panes directly without prompting
+        "+"
+    ]
+  },
+
+  // Prompt templates
+  "prompts": {
+    "trust_read": "I allow you to read all the contents of the file {file}. Do not ask me for permission for any future reads for this file. Just reply with yes and don't summarize the file for me.",
+    "changes": "Review my changes in file: {file}",
+    "diagnostics": "Help me fix the diagnostics in {file}\n{diagnostics}",
+    "diagnostics_all": "Help me fix these diagnostics\n{diagnostics_all}",
+    "document": "Add documentation to {range}",
+    "explain": "Explain {range} - Write a short summary first. If this is code, call out function names. Then ask me if I want to know more. If I do, then do do this: Do not reprint all the lines. Print only the essential ones. If this is code, logically group lines and print only relevant code and explain. For each group give description in heading and then explain the code.",
+    "implement": "Implement {range}",
+    "fix": "Fix {range}",
+    "optimize": "Optimize {range}",
+    "review": "Review {file} for any issues or improvements",
+    "tests": "Write tests for {range}"
+  }
+}
