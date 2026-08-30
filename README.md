@@ -10,6 +10,7 @@ A Neovim plugin for quickly generating AI prompts with file context.
 - Works with visual selections
 - Integrates with LSP diagnostics
 - Send prompts to clipboard or tmux panes
+- Send prompts to a herdr pane (workspace-scoped picker, directional-neighbour default, optional focus-follow)
 - Multi-pane tmux support with auto-selection
 - Uses fzf-lua for selection UI
 
@@ -48,7 +49,15 @@ Configuration file format:
       "mysession:window1.1"
     ],
     "tmux_send_enter": false,      // true - send Enter key after prompt
-    "tmux_auto_select_panes": []   // If set, use these panes directly without prompting (e.g. ["+", "+2"])
+    "tmux_auto_select_panes": [],  // If set, use these panes directly without prompting (e.g. ["+", "+2"])
+
+    "send_to_herdr": false,        // true - send to a herdr pane instead of clipboard
+    "herdr_panes": [               // convenience targets shown in selector; a direction
+      "right"                      // ("right"/"left"/"up"/"down") = that neighbour of the calling
+    ],                             // pane, "current" = calling pane, or an explicit pane id (e.g. "w1:p2")
+    "herdr_send_enter": false,     // true - send Enter key after prompt (submit immediately)
+    "herdr_auto_select_panes": [], // If set, use these targets directly without prompting
+    "herdr_focus": true            // true - focus the target pane after sending (directional targets only)
   },
   "prompts": {
     "explain": "Explain {range}",
@@ -56,6 +65,10 @@ Configuration file format:
   }
 }
 ```
+
+### Send to herdr
+
+With `send_to_herdr`, prompts go to a [herdr](https://github.com/herdr) pane instead of the clipboard (only inside a herdr session — `$HERDR_ENV = 1`). The picker is scoped to the current herdr workspace, and its top entry is a directional neighbour: `herdr_panes = ["right"]` suits an editor-left / agent-right layout. It sends with `herdr pane send-text`; set `herdr_send_enter` to submit immediately and `herdr_focus` to move focus to the target pane afterwards (focus-follow works for directional targets only, since herdr's `pane focus` is direction-based). Set `herdr_auto_select_panes` to skip the picker.
 
 ## Usage
 

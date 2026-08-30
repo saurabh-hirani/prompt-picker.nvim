@@ -1,7 +1,7 @@
 {
   // Configuration options
   "config": {
-    "send_to_tmux": true,      // true - send to tmux pane instead of clipboard
+    "send_to_tmux": false,     // true - send to tmux pane instead of clipboard
     "tmux_panes": [             // List of target panes shown in selector
       "+",
       "+2",
@@ -10,7 +10,13 @@
     "tmux_send_enter": true,    // true - send Enter key after prompt
     "tmux_auto_select_panes": [  // If set, use these panes directly without prompting
        "+"
-    ]
+    ],
+    "send_to_herdr": true,      // true - send to a herdr pane instead of clipboard
+    "herdr_panes": [            // convenience targets: a direction (right/left/up/down) =
+      "right"                   // that neighbour of the calling pane, "current", or a pane id
+    ],
+    "herdr_send_enter": false,  // true - send Enter key after prompt (submit immediately)
+    "herdr_auto_select_panes": [] // If set, use these targets directly without prompting
   },
 
   // Prompt templates

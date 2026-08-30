@@ -24,6 +24,12 @@ local default_config = {
   tmux_panes = {"+"},
   tmux_send_enter = false,
   tmux_auto_select_panes = {},  -- If set, use these panes directly without prompting
+  send_to_herdr = false,
+  herdr_panes = {"right"},      -- direction ("right"/"left"/"up"/"down") = that neighbour of
+                                -- the calling pane, "current" = calling pane, or an explicit pane id
+  herdr_send_enter = false,
+  herdr_auto_select_panes = {}, -- If set, use these targets directly without prompting
+  herdr_focus = true,           -- true - focus the target pane after sending
 }
 
 local default_prompts = {
@@ -90,6 +96,82 @@ local function render_prompt(template)
   end))
 end
 
+-- Send `text` to a single herdr pane via `pane send-text`, optionally Enter.
+-- Args are passed as a list so no shell quoting is needed. `direction` (when the
+-- target was chosen by direction) lets us focus it afterwards -- herdr's
+-- `pane focus` is direction-based (`--pane` is not supported), so focus only
+-- works for directional targets.
+local function herdr_send(pane_id, text, direction)
+  vim.fn.system({ "herdr", "pane", "send-text", pane_id, text })
+  if M.config.herdr_send_enter then
+    vim.fn.system({ "herdr", "pane", "send-keys", pane_id, "Enter" })
+  end
+  if M.config.herdr_focus and direction then
+    vim.fn.system({ "herdr", "pane", "focus", "--direction", direction, "--current" })
+  end
+end
+
+local HERDR_DIRECTION_LABELS = {
+  right = "\u{2192} pane on the right",
+  left = "\u{2190} pane on the left",
+  up = "\u{2191} pane above",
+  down = "\u{2193} pane below",
+}
+
+-- Resolve the pane id neighbouring $HERDR_PANE_ID in `direction` (nil if none).
+local function herdr_neighbor(direction)
+  local out = vim.fn.system({ "herdr", "pane", "neighbor", "--direction", direction, "--current" })
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
+  local ok, data = pcall(vim.json.decode, out)
+  if not ok or type(data) ~= "table" then
+    return nil
+  end
+  local neighbor = data.result and data.result.neighbor
+  return neighbor and neighbor.neighbor_pane_id or nil
+end
+
+-- Resolve a picker choice into a herdr pane id, plus the direction it came from
+-- (nil for non-directional choices). A direction word or arrow label resolves to
+-- that neighbour of the calling pane; "current" maps to $HERDR_PANE_ID;
+-- otherwise the leading token is the opaque pane id.
+local function herdr_target_of(choice)
+  if choice == "current" or choice:match("^current pane") then
+    return vim.env.HERDR_PANE_ID, nil
+  end
+  for direction, label in pairs(HERDR_DIRECTION_LABELS) do
+    if choice == direction or choice == label then
+      return herdr_neighbor(direction), direction
+    end
+  end
+  return choice:match("^(%S+)"), nil
+end
+
+-- Live herdr panes as picker lines "<pane_id>  <agent/label/short-cwd>",
+-- excluding `exclude` (the caller pane). cwd is shortened to its last segment.
+local function herdr_pane_items(json, exclude)
+  local ok, data = pcall(vim.json.decode, json)
+  if not ok or type(data) ~= "table" then
+    return {}
+  end
+  local panes = data.result and data.result.panes
+  if type(panes) ~= "table" then
+    return {}
+  end
+  local items = {}
+  for _, pane in ipairs(panes) do
+    if type(pane) == "table" and pane.pane_id and pane.pane_id ~= exclude then
+      local desc = pane.agent or pane.label
+      if not desc and pane.cwd then
+        desc = pane.cwd:match("([^/]+)/?$") or pane.cwd
+      end
+      table.insert(items, pane.pane_id .. (desc and ("  " .. desc) or ""))
+    end
+  end
+  return items
+end
+
 local function send_prompt(text)
   if M.config.send_to_tmux then
     -- If tmux_auto_select_panes is set, use those panes directly without prompting
@@ -145,6 +227,67 @@ local function send_prompt(text)
             vim.fn.system(string.format("tmux send-keys -t '%s' '%s'", target, escaped))
             if M.config.tmux_send_enter then
               vim.fn.system(string.format("tmux send-keys -t '%s' Enter", target))
+            end
+          end
+        end
+      }
+    })
+  elseif M.config.send_to_herdr then
+    if vim.fn.executable("herdr") ~= 1 then
+      print("herdr not found on PATH")
+      return
+    end
+    if vim.env.HERDR_ENV ~= "1" then
+      print("Not inside a herdr session")
+      return
+    end
+
+    -- If herdr_auto_select_panes is set, use those targets directly.
+    if M.config.herdr_auto_select_panes and #M.config.herdr_auto_select_panes > 0 then
+      for _, pane in ipairs(M.config.herdr_auto_select_panes) do
+        local target, direction = herdr_target_of(pane)
+        if target then
+          herdr_send(target, text, direction)
+        end
+      end
+      return
+    end
+
+    -- Build the pane list: configured convenience targets first (a direction
+    -- like "right" is your editor-left/agent-right default, shown as an arrow
+    -- label; "current" is the calling pane), then the live panes in the current
+    -- workspace only. Scoping mirrors tmux list-panes -s.
+    local items = {}
+    local config_panes = type(M.config.herdr_panes) == "table" and M.config.herdr_panes or {M.config.herdr_panes}
+    for _, pane in ipairs(config_panes) do
+      if HERDR_DIRECTION_LABELS[pane] then
+        table.insert(items, HERDR_DIRECTION_LABELS[pane])
+      elseif pane == "current" then
+        table.insert(items, "current pane ($HERDR_PANE_ID)")
+      else
+        table.insert(items, pane)
+      end
+    end
+    local list_cmd = { "herdr", "pane", "list" }
+    if vim.env.HERDR_WORKSPACE_ID then
+      vim.list_extend(list_cmd, { "--workspace", vim.env.HERDR_WORKSPACE_ID })
+    end
+    local list = vim.fn.system(list_cmd)
+    if vim.v.shell_error == 0 then
+      vim.list_extend(items, herdr_pane_items(list, vim.env.HERDR_PANE_ID))
+    end
+
+    require('fzf-lua').fzf_exec(items, {
+      prompt = "Send to herdr pane(s) (Tab for multi-select): ",
+      actions = {
+        ['default'] = function(selected)
+          if not selected or #selected == 0 then
+            return
+          end
+          for _, choice in ipairs(selected) do
+            local target, direction = herdr_target_of(choice)
+            if target then
+              herdr_send(target, text, direction)
             end
           end
         end

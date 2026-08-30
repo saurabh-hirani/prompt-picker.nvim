@@ -7,7 +7,15 @@
       "mysession:window1.1"
     ],
     "tmux_send_enter": false,   // true - send Enter key after prompt
-    "tmux_auto_select_panes": [] // If set, use these panes directly without prompting (e.g. ["+", "+2"])
+    "tmux_auto_select_panes": [], // If set, use these panes directly without prompting (e.g. ["+", "+2"])
+
+    "send_to_herdr": false,     // true - send to a herdr pane instead of clipboard
+    "herdr_panes": [            // convenience targets: a direction (right/left/up/down) =
+      "right"                   // that neighbour of the calling pane, "current", or a pane id
+    ],
+    "herdr_send_enter": false,  // true - send Enter key after prompt (submit immediately)
+    "herdr_auto_select_panes": [], // If set, use these targets directly without prompting
+    "herdr_focus": true         // true - focus the target pane after sending (directional targets only)
   },
 
   // Prompt templates
